@@ -5,6 +5,8 @@
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
  
 struct sockaddr_in localSock;
 struct ip_mreq group;

@@ -2,7 +2,7 @@ CC=gcc
 S=multicast_server.c
 C=multicast_client.c
 
-all: server client
+all: clean server client
 
 server: 
 	@${CC} ${S} -o server
