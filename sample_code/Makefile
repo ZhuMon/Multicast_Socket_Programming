@@ -11,5 +11,5 @@ client:
 	@${CC} ${C} -o client
 
 clean:
-	@rm client server
+	@rm -f client server
 

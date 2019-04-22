@@ -12,7 +12,7 @@ struct sockaddr_in localSock;
 struct ip_mreq group;
 int sd;
 int datalen;
-char databuf[1024];
+char databuf[256];
 int portno;
 
 
@@ -85,7 +85,83 @@ int main(int argc, char *argv[])
         exit(1);
     } else {
         printf("Reading datagram message...OK.\n");
-        printf("The message from multicast server is: \"%s\"\n", databuf);
+        printf("The message from multicast server is: \n%s\n", databuf);
     }
+    
+   
+    int line_pointer = 0; // store position of '\n' in buffer
+    char file_name[256];
+    char file_size_c[256];
+    int file_size_i; 
+
+    // parse first line in first packet
+    for(int i = 0; i < 256; i++){
+        if(databuf[i] == '\n'){
+            line_pointer = i; 
+            break;
+        }
+        file_name[i] = databuf[i];
+    }
+
+    if(line_pointer == 0){
+        perror("ERROR, first packet format error");
+        exit(1);
+    }
+
+    // parse second line in second packet
+    for(int i = 0; i < 256; i++){
+        if(databuf[i+line_pointer+1] == '\n'){
+            line_pointer = i+line_pointer+1; 
+            break;
+        }
+        file_size_c[i] = databuf[i+line_pointer+1];
+    }
+    
+    if(line_pointer == 0){
+        perror("ERROR, first packet format error");
+        exit(1);
+    }
+
+    file_size_i = atoi(file_size_c);  // change file size from char to int
+
+    // open file to record
+    FILE *outfile;
+    outfile = fopen(file_name, "wb");
+
+    // find number of packets
+    int p_num;
+    if(file_size_i%1024 == 0){
+        p_num = file_size_i / 1024;
+    } else {
+        p_num = file_size_i / 1024 + 1;
+    }
+
+    // receive packet
+    char p_buffer[1024];
+    for(int i = 0; i < p_num; i++){
+        bzero(p_buffer, 1024);
+        // if time to send the last packet whose size different with each other
+        if(i == p_num - 1 && file_size_i % 1024 != 0){
+
+            if(read(sd, p_buffer, file_size_i % 1024) < 0) {
+                fprintf(stderr,"Receive error");
+                exit(1);
+            } else{
+                fwrite(p_buffer, 1, file_size_i % 1024, outfile);
+            }
+        } else {
+            if(read(sd, p_buffer, 1024) < 0) {
+                fprintf(stderr,"Receive error");
+                exit(1);
+            } else{
+                fwrite(p_buffer, 1, 1024, outfile);
+            }
+
+        }
+    }
+    printf("Get all packet...OK.\n");
+    fclose(outfile);
+    close(sd);
+
     return 0;
 }
