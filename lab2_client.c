@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "my_const.h"
 
 struct sockaddr_in localSock;
 struct ip_mreq group;
@@ -14,7 +15,6 @@ int sd;
 int datalen;
 char databuf[256];
 int portno;
-int lpi = 8; // length of packet index
 
 
 int main(int argc, char *argv[])
@@ -130,27 +130,27 @@ int main(int argc, char *argv[])
     outfile = fopen(file_name, "wb");
 
     // find number of packets
-    int p_num = file_size_i / 16384;
-    if(file_size_i%16384 == 0){
+    int p_num = file_size_i / p_len;
+    if(file_size_i%p_len == 0){
         p_num = p_num;
     } else {
         p_num += 1;
     }
 
     // receive packet
-    char p_buffer[16384+lpi];
+    char p_buffer[p_len+lpi];
     int get_packet[p_num]; // record whether get the i-th packet
     char p_index[lpi+1]; // packet index
     int p_index_i;
     for(int i = 0; i < p_num; i++){
-        //bzero(p_buffer, 16384+lpi);
-        memset(p_buffer, '\0', 16384+lpi);
+        //bzero(p_buffer, p_len+lpi);
+        memset(p_buffer, '\0', p_len+lpi);
         // printf("i: %d\n", i);
         memset(p_index, '\0', lpi+1);
         // if time to send the last packet whose size different with each other
-        if(i == p_num - 1 && file_size_i % 16384 != 0){
+        if(i == p_num - 1 && file_size_i % p_len != 0){
 
-            if(read(sd, p_buffer, file_size_i % 16384 + lpi) < 0) {
+            if(read(sd, p_buffer, file_size_i % p_len + lpi) < 0) {
                 fprintf(stderr,"Receive error");
                 exit(1);
             } //else{
@@ -163,18 +163,18 @@ int main(int argc, char *argv[])
             get_packet[p_index_i] = 1; // record "get the packet"
 
             // Move p_buffer forward lpi(8) char
-            for(int j = 0; j < file_size_i%16384+lpi; j++){
-                if(j >= file_size_i%16384){
+            for(int j = 0; j < file_size_i%p_len+lpi; j++){
+                if(j >= file_size_i%p_len){
                     p_buffer[j] = '\0';
                     continue;
                 }
                 p_buffer[j] = p_buffer[j + lpi];
             }
             
-            fwrite(p_buffer, 1, file_size_i % 16384, outfile);
+            fwrite(p_buffer, 1, file_size_i % p_len, outfile);
 
         } else {
-            if(read(sd, p_buffer, 16384+lpi) < 0) {
+            if(read(sd, p_buffer, p_len+lpi) < 0) {
                 fprintf(stderr,"Receive error");
                 exit(1);
             } //else{
@@ -189,8 +189,8 @@ int main(int argc, char *argv[])
 
 
             // Move p_buffer forward lpi(8) char
-            for(int j = 0; j < 16384+lpi; j++){
-                if(j >= 16384){
+            for(int j = 0; j < p_len+lpi; j++){
+                if(j >= p_len){
                     p_buffer[j] = '\0';
                     continue;
                 }
@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
             }
             
             
-            fwrite(p_buffer, 1, 16384, outfile);
+            fwrite(p_buffer, 1, p_len, outfile);
         }
 
 
