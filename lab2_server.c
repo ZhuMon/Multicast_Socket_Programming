@@ -11,12 +11,12 @@
 struct in_addr localInterface;
 struct sockaddr_in groupSock;
 int sd;
-char databuf[1024] = "Multicast test message.";
+char databuf[16384] = "Multicast test message.";
 int datalen = sizeof(databuf);
 int portno;
 char file_name[256];
 struct stat f_state;
-
+int lpi = 8;  // length of packet index
 
 int main (int argc, char *argv[])
 {
@@ -106,8 +106,8 @@ int main (int argc, char *argv[])
     strcat(f_buffer, "\n");
     
     
-    /*int datalen = 1024;*/
-    if(sendto(sd, f_buffer, datalen, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
+    /*int datalen = 16384;*/
+    if(sendto(sd, f_buffer, 256, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
         perror("Sending datagram message error");
     } else
         printf("Sending datagram message...OK\n");
@@ -123,32 +123,34 @@ int main (int argc, char *argv[])
     }*/
     
 
-    // Spilt file to 1024 byte
+    // Spilt file to 16384 byte
     int p_num;
-    if (f_state.st_size%1024 == 0){
-        p_num = f_state.st_size/1024;
+    if (f_state.st_size%16384 == 0){
+        p_num = f_state.st_size/16384;
     } else { 
-        p_num = f_state.st_size/1024+1; 
+        p_num = f_state.st_size/16384+1; 
     }
 
     // Send file
-    char p_buffer[1024];
+    char p_buffer[16384+lpi];
     for(int i = 0; i < p_num; i++){
-        bzero(p_buffer, 1024);
-        // if time to send the last packet whose size different with each other
-        if(i == p_num-1 && f_state.st_size % 1024 != 0){
-            for(int j = 0; j < f_state.st_size%1024; j++){
-                p_buffer[j] = buffer[i*1024+j];
+        bzero(p_buffer, 16384+lpi);
+        sprintf(p_buffer, "%d", i); // Place index in packet first lpi(8) char
+
+        // send the last packet whose size different with each other
+        if(i == p_num-1 && f_state.st_size % 16384 != 0){
+            for(int j = 0; j < f_state.st_size%16384; j++){
+                p_buffer[j+lpi] = buffer[i*16384+j];
             }
-            if(sendto(sd, p_buffer, f_state.st_size%1024, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
+            if(sendto(sd, p_buffer, f_state.st_size%16384+lpi, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
                 perror("Sending datagram message error");
             } 
             
         } else {
-            for(int j = 0; j < 1024; j++){
-                p_buffer[j] = buffer[i*1024+j];
+            for(int j = 0; j < 16384; j++){
+                p_buffer[j+lpi] = buffer[i*16384+j];
             }
-            if(sendto(sd, p_buffer, 1024, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
+            if(sendto(sd, p_buffer, 16384+lpi, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
                 perror("Sending datagram message error");
             } //else
                 //printf("Sending datagram message...OK\n");
