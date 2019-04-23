@@ -12,11 +12,10 @@
 struct in_addr localInterface;
 struct sockaddr_in groupSock;
 int sd;
-//char databuf[p_len];// = "Multicast test message.";
-//int datalen = sizeof(databuf);
 int portno;
-char file_name[256];
 struct stat f_state;
+
+struct file_inf my_fi;
 
 int main (int argc, char *argv[])
 {
@@ -31,24 +30,27 @@ int main (int argc, char *argv[])
     portno = atoi(argv[2]);
 
     // file_name = argv[3]
-    bzero(file_name, 256);
-    strcat(file_name,argv[3]);
+    clean_fi(&my_fi);
+    strcat(my_fi.file_name, argv[3]);
 
     // Open file & Check file
     FILE *file;
-    file = fopen(file_name, "rb");
+    file = fopen(my_fi.file_name, "rb");
     if (file == NULL) {
         fprintf(stderr, "ERROR, open %s fail\n", argv[3]);
         exit(1);
     }
 
     // Get file imformation
-    stat(file_name, &f_state);
+    stat(my_fi.file_name, &f_state);
+
+    // Store size of file
+    my_fi.file_size = f_state.st_size;
 
     // Read file
-    char buffer[f_state.st_size+1];
-    bzero(buffer, f_state.st_size+1);
-    fread(buffer, f_state.st_size, 1, file);
+    char buffer[my_fi.file_size+1];
+    bzero(buffer, sizeof(buffer));
+    fread(buffer, my_fi.file_size, 1, file);
 
 
     /* Create a datagram socket on which to send. */
@@ -93,21 +95,9 @@ int main (int argc, char *argv[])
     
     /* Send a message to the multicast group specified by the*/
     /* groupSock sockaddr structure. */
-
-    // Pass a packet which store file name, and file size
-    char f_buffer[256]; //first buffer
-    bzero(f_buffer, 256);
-    strcat(f_buffer, file_name); //store file name in first line
-    strcat(f_buffer, "\n");
-
-    char file_size_c[256];  //store file_size in character
-    sprintf(file_size_c, "%ld", f_state.st_size);  //change file size from int to char
-    strcat(f_buffer, file_size_c); //store file size in second line
-    strcat(f_buffer, "\n");
-    
     
     /*int datalen = p_len;*/
-    if(sendto(sd, f_buffer, 256, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
+    if(sendto(sd, &my_fi, sizeof(my_fi), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
         perror("Sending datagram message error");
     } else
         printf("Sending datagram message...OK\n");
@@ -132,25 +122,30 @@ int main (int argc, char *argv[])
     }
 
     // Send file
-    char p_buffer[p_len+lpi];
+    //char p_buffer[p_len+lpi];
+    struct packet_inf p_buffer;
     for(int i = 0; i < p_num; i++){
-        bzero(p_buffer, p_len+lpi);
-        sprintf(p_buffer, "%d", i); // Place index in packet first lpi(8) char
+        clean_pi(&p_buffer);
+        //bzero(p_buffer, p_len+lpi);
+        //sprintf(p_buffer, "%d", i); 
         
+        // Store index in packet
+        p_buffer.index = i;
+
         // send the last packet whose size different with each other
-        if(i == p_num-1 && f_state.st_size % p_len != 0){
-            for(int j = 0; j < f_state.st_size%p_len; j++){
-                p_buffer[j+lpi] = buffer[i*p_len+j];
+        if(i == p_num-1 && my_fi.file_size % p_len != 0){
+            for(int j = 0; j < my_fi.file_size % p_len; j++){
+                p_buffer.content[j] = buffer[i*p_len+j];
             }
-            if(sendto(sd, p_buffer, f_state.st_size%p_len+lpi, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
+            if(sendto(sd, &p_buffer, sizeof(p_buffer), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
                 perror("Sending datagram message error");
             } 
             
         } else {
             for(int j = 0; j < p_len; j++){
-                p_buffer[j+lpi] = buffer[i*p_len+j];
+                p_buffer.content[j] = buffer[i*p_len+j];
             }
-            if(sendto(sd, p_buffer, p_len+lpi, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
+            if(sendto(sd, &p_buffer, sizeof(p_buffer), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
                 perror("Sending datagram message error");
             } //else
                 //printf("Sending datagram message...OK\n");

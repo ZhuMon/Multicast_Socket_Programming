@@ -79,8 +79,10 @@ int main(int argc, char *argv[])
         printf("Adding multicast group...OK.\n");
 
     /* Read from the socket. */
-    datalen = sizeof(databuf);
-    if(read(sd, databuf, datalen) < 0) {
+    //datalen = sizeof(databuf);
+    struct file_inf my_fi;
+    clean_fi(&my_fi);
+    if(read(sd, &my_fi, sizeof(my_fi)) < 0) {
         perror("Reading datagram message error");
         close(sd);
         exit(1);
@@ -90,115 +92,46 @@ int main(int argc, char *argv[])
     }
     
    
-    int line_pointer = 0; // store position of '\n' in buffer
-    char file_name[256];
-    char file_size_c[256];
-    int file_size_i; 
-
-    // parse first line in first packet
-    for(int i = 0; i < 256; i++){
-        if(databuf[i] == '\n'){
-            line_pointer = i; 
-            break;
-        }
-        file_name[i] = databuf[i];
-    }
-
-    if(line_pointer == 0){
-        perror("ERROR, first packet format error");
-        exit(1);
-    }
-
-    // parse second line in second packet
-    for(int i = 0; i < 256; i++){
-        if(databuf[i+line_pointer+1] == '\n'){
-            line_pointer = i+line_pointer+1; 
-            break;
-        }
-        file_size_c[i] = databuf[i+line_pointer+1];
-    }
-    
-    if(line_pointer == 0){
-        perror("ERROR, first packet format error");
-        exit(1);
-    }
-
-    file_size_i = atoi(file_size_c);  // change file size from char to int
 
     // open file to record
     FILE *outfile;
-    outfile = fopen(file_name, "wb");
+    outfile = fopen(my_fi.file_name, "wb");
 
     // find number of packets
-    int p_num = file_size_i / p_len;
-    if(file_size_i%p_len == 0){
+    int p_num = my_fi.file_size / p_len;
+    if(my_fi.file_size%p_len == 0){
         p_num = p_num;
     } else {
         p_num += 1;
     }
 
     // receive packet
-    char p_buffer[p_len+lpi];
+    struct packet_inf p_buffer;
     int get_packet[p_num]; // record whether get the i-th packet
     char p_index[lpi+1]; // packet index
     int p_index_i;
     for(int i = 0; i < p_num; i++){
-        //bzero(p_buffer, p_len+lpi);
-        memset(p_buffer, '\0', p_len+lpi);
-        // printf("i: %d\n", i);
-        memset(p_index, '\0', lpi+1);
-        // if time to send the last packet whose size different with each other
-        if(i == p_num - 1 && file_size_i % p_len != 0){
+        clean_pi(&p_buffer);
+        
+        // send the last packet whose size different with each other
+        if(i == p_num - 1 && my_fi.file_size % p_len != 0){
 
-            if(read(sd, p_buffer, file_size_i % p_len + lpi) < 0) {
+            if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
                 fprintf(stderr,"Receive error");
                 exit(1);
-            } //else{
-            //}
-
-            // Take index from packet
-            strncat(p_index, p_buffer, lpi);
-            
-            p_index_i = atoi(p_index);
-            get_packet[p_index_i] = 1; // record "get the packet"
-
-            // Move p_buffer forward lpi(8) char
-            for(int j = 0; j < file_size_i%p_len+lpi; j++){
-                if(j >= file_size_i%p_len){
-                    p_buffer[j] = '\0';
-                    continue;
-                }
-                p_buffer[j] = p_buffer[j + lpi];
+            } else{
+                get_packet[p_buffer.index] = 1; // record "get the packet"
+                fwrite(p_buffer.content, 1, sizeof(p_buffer.content), outfile);
             }
-            
-            fwrite(p_buffer, 1, file_size_i % p_len, outfile);
 
         } else {
-            if(read(sd, p_buffer, p_len+lpi) < 0) {
+            if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
                 fprintf(stderr,"Receive error");
                 exit(1);
-            } //else{
-            //}
-
-            // Take index from packet
-            strncat(p_index, p_buffer, lpi);
-            
-            p_index_i = atoi(p_index);
-            //printf("%d\n", p_index_i);
-            get_packet[p_index_i] = 1; // record "get the packet"
-
-
-            // Move p_buffer forward lpi(8) char
-            for(int j = 0; j < p_len+lpi; j++){
-                if(j >= p_len){
-                    p_buffer[j] = '\0';
-                    continue;
-                }
-                p_buffer[j] = p_buffer[j + lpi];
+            } else{
+                get_packet[p_buffer.index] = 1; // record "get the packet"
+                fwrite(p_buffer.content, 1, sizeof(p_buffer.content), outfile);
             }
-            
-            
-            fwrite(p_buffer, 1, p_len, outfile);
         }
 
 
