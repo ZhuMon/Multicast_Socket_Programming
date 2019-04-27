@@ -108,7 +108,6 @@ int main(int argc, char *argv[])
     // receive packet
     struct packet_inf p_buffer;
     int get_packet[p_num]; // record whether get the i-th packet
-    char p_index[lpi+1]; // packet index
     int p_index_i;
     for(int i = 0; i < p_num; i++){
         clean_pi(&p_buffer);

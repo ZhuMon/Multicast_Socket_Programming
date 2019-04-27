@@ -2,8 +2,7 @@
 
 #ifndef MY_CONST_H
 #define MY_CONST_H
-#define p_len 2048 // length of packet
-int lpi = 8; // length of packet index
+#define p_len 1024 // length of packet
 
 struct file_inf{
     char file_name[256];
