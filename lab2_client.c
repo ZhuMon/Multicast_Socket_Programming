@@ -66,8 +66,6 @@ void fec_transfer(){
     memset(buffer, 0, sizeof(buffer));
 
     clean_pi(&p_buffer);
-    int c = 0,  p = 0, n = 0;
-    printf("p_num: %d\n", p_num);
     while(p_buffer.index < p_num+1){
         clean_pi(&p_buffer);
 
@@ -81,10 +79,6 @@ void fec_transfer(){
                     buffer[p_buffer.index*p_len+i] = p_buffer.next[i];
                 }
                 content[p_buffer.index] = 1;
-                n++;
-                if(p_buffer.index == 0){
-                    printf("c[0] = %d\n", content[p_buffer.index]);
-                }
             } 
             if(p_buffer.index > 0 && 
                       p_buffer.index < p_num+1 && 
@@ -94,45 +88,30 @@ void fec_transfer(){
                     buffer[(p_buffer.index-1)*p_len+i] = p_buffer.content[i];
                 }
                 content[p_buffer.index-1] = 1;
-                c++;
             } 
             if(p_buffer.index > 1 && content[p_buffer.index-2] == 0){
                 for(int i = 0; i < sizeof(p_buffer.prev);i++){
                     buffer[(p_buffer.index-2)*p_len+i] = p_buffer.prev[i];
                 }
                 content[p_buffer.index-2] = 1;
-                p++;
             }
 
-            if(content[0] == 0){
-                printf("%d ", p_buffer.index);
-            }
         }
     }
 
-    if(content[0] == 0){
-        printf("fuck\n");
-    }
-    printf("n: %d, c: %d, p: %d\n", n, c, p);
-    fwrite(buffer, 1, sizeof(buffer), outfile);
+    fwrite(buffer, 1, my_fi.file_size, outfile);
     int got = 0; // record # of got packets 
     int complete = 0;
     for(int i = 0;i < p_num+2;i++){
         if(get_packet[i]){
             got++;
-        } else {
-            printf("%d ", i);
         }
     }
-    printf("\n");
     for(int i = 0; i < p_num; i++){
         if(content[i]){
             complete++;
-        } else {
-            printf("%d", i);
         }
     }
-    printf("\n");
     printf("Lose rate: %f%%\n", ((p_num+2-got)/(float)(p_num+2))*100);
     printf("Complete rate: %f%%\n", (complete/(float)p_num)*100);
 }
