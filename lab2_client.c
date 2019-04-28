@@ -13,9 +13,129 @@ struct sockaddr_in localSock;
 struct ip_mreq group;
 int sd;
 int datalen;
-char databuf[256];
 int portno;
+FILE *outfile; // the output file
+int p_num;     // expect received packets
 
+struct file_inf my_fi;      // imformation of file
+struct packet_inf p_buffer; // buffer of received packet
+
+void pure_transfer(){
+    int get_packet[p_num]; // record whether get the i-th packet
+    char buffer[my_fi.file_size]; // to reconstruct file
+    memset(buffer, 0, sizeof(buffer));
+
+    while(p_buffer.index < p_num-1){
+        clean_pi(&p_buffer);
+
+        if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
+            fprintf(stderr,"Receive error");
+            exit(1);
+        } else{
+            get_packet[p_buffer.index] = 1; // record "get the packet"
+            
+            // reconstruct file
+            for(int i = 0;i < sizeof(p_buffer.content); i++){
+                buffer[p_buffer.index * p_len + i] = p_buffer.content[i];
+            }
+
+        }
+    }
+
+    fwrite(buffer, 1, sizeof(buffer), outfile);
+
+    int got = 0; // record # of got packets 
+    for(int i = 0;i < p_num;i++){
+        if(get_packet[i]){
+            got++;
+        } else {
+            printf("%d ", i);
+        }
+    }
+    printf("\n");
+
+    printf("Lose rate: %f%%\n", ((p_num-got)/(float)p_num)*100);
+}
+
+void fec_transfer(){
+    // redundant data will have 2 more packets
+    _Bool get_packet[p_num+2]; // record whether get the i-th packet
+    int content[p_num];      // whether record the i-th content
+    char buffer[p_num*p_len]; // to reconstruct file //avoid overflow
+    memset(content, 0, sizeof(content));
+    memset(buffer, 0, sizeof(buffer));
+
+    clean_pi(&p_buffer);
+    int c = 0,  p = 0, n = 0;
+    printf("p_num: %d\n", p_num);
+    while(p_buffer.index < p_num+1){
+        clean_pi(&p_buffer);
+
+        if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
+            fprintf(stderr,"Receive error");
+            exit(1);
+        } else{
+            get_packet[p_buffer.index] = 1; // record "get the packet"
+            if(p_buffer.index < p_num && content[p_buffer.index] == 0){
+                for(int i = 0; i < sizeof(p_buffer.next); i++){
+                    buffer[p_buffer.index*p_len+i] = p_buffer.next[i];
+                }
+                content[p_buffer.index] = 1;
+                n++;
+                if(p_buffer.index == 0){
+                    printf("c[0] = %d\n", content[p_buffer.index]);
+                }
+            } 
+            if(p_buffer.index > 0 && 
+                      p_buffer.index < p_num+1 && 
+                      content[p_buffer.index-1] == 0){
+            // if get the packet which has content and the content never recorded
+                for(int i = 0; i < sizeof(p_buffer.content);i++){
+                    buffer[(p_buffer.index-1)*p_len+i] = p_buffer.content[i];
+                }
+                content[p_buffer.index-1] = 1;
+                c++;
+            } 
+            if(p_buffer.index > 1 && content[p_buffer.index-2] == 0){
+                for(int i = 0; i < sizeof(p_buffer.prev);i++){
+                    buffer[(p_buffer.index-2)*p_len+i] = p_buffer.prev[i];
+                }
+                content[p_buffer.index-2] = 1;
+                p++;
+            }
+
+            if(content[0] == 0){
+                printf("%d ", p_buffer.index);
+            }
+        }
+    }
+
+    if(content[0] == 0){
+        printf("fuck\n");
+    }
+    printf("n: %d, c: %d, p: %d\n", n, c, p);
+    fwrite(buffer, 1, sizeof(buffer), outfile);
+    int got = 0; // record # of got packets 
+    int complete = 0;
+    for(int i = 0;i < p_num+2;i++){
+        if(get_packet[i]){
+            got++;
+        } else {
+            printf("%d ", i);
+        }
+    }
+    printf("\n");
+    for(int i = 0; i < p_num; i++){
+        if(content[i]){
+            complete++;
+        } else {
+            printf("%d", i);
+        }
+    }
+    printf("\n");
+    printf("Lose rate: %f%%\n", ((p_num+2-got)/(float)(p_num+2))*100);
+    printf("Complete rate: %f%%\n", (complete/(float)p_num)*100);
+}
 
 int main(int argc, char *argv[])
 {
@@ -79,8 +199,6 @@ int main(int argc, char *argv[])
         printf("Adding multicast group...OK.\n");
 
     /* Read from the socket. */
-    //datalen = sizeof(databuf);
-    struct file_inf my_fi;
     clean_fi(&my_fi);
     if(read(sd, &my_fi, sizeof(my_fi)) < 0) {
         perror("Reading datagram message error");
@@ -88,61 +206,29 @@ int main(int argc, char *argv[])
         exit(1);
     } else {
         printf("Reading datagram message...OK.\n");
-        printf("The message from multicast server is: \n%s\n", databuf);
+        //printf("The message from multicast server is: \n%s\n", databuf);
     }
     
    
 
     // open file to record
-    FILE *outfile;
     outfile = fopen(my_fi.file_name, "wb");
 
     // find number of packets
-    int p_num = my_fi.file_size / p_len;
+    p_num = my_fi.file_size / p_len;
     if(my_fi.file_size%p_len == 0){
         p_num = p_num;
     } else {
         p_num += 1;
     }
 
-    // receive packet
-    struct packet_inf p_buffer;
-    int get_packet[p_num]; // record whether get the i-th packet
-    int p_index_i;
-    for(int i = 0; i < p_num; i++){
-        clean_pi(&p_buffer);
-        
-        // send the last packet whose size different with each other
-        if(i == p_num - 1 && my_fi.file_size % p_len != 0){
-
-            if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
-                fprintf(stderr,"Receive error");
-                exit(1);
-            } else{
-                get_packet[p_buffer.index] = 1; // record "get the packet"
-                fwrite(p_buffer.content, 1, sizeof(p_buffer.content), outfile);
-            }
-
-        } else {
-            if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
-                fprintf(stderr,"Receive error");
-                exit(1);
-            } else{
-                get_packet[p_buffer.index] = 1; // record "get the packet"
-                fwrite(p_buffer.content, 1, sizeof(p_buffer.content), outfile);
-            }
-        }
-
-
-    }
-    int got = 0; // record # of got packets 
-    for(int i = 0;i < p_num;i++){
-        if(get_packet[i]){
-            got++;
-        }
+    if(my_fi.fec){
+        fec_transfer();
+    } else {
+        pure_transfer();
     }
 
-    printf("Lose rate: %f\n", (p_num-got)/(float)p_num);
+
     fclose(outfile);
     close(sd);
 
