@@ -27,13 +27,12 @@ void pure_transfer(){
 
     while(p_buffer.index < p_num-1){
         clean_pi(&p_buffer);
-
+        // receive packet
         if(read(sd, &p_buffer, sizeof(p_buffer)) < 0) {
             fprintf(stderr,"Receive error");
             exit(1);
         } else{
             get_packet[p_buffer.index] = 1; // record "get the packet"
-            
             // reconstruct file
             for(int i = 0;i < sizeof(p_buffer.content); i++){
                 buffer[p_buffer.index * p_len + i] = p_buffer.content[i];
@@ -48,11 +47,8 @@ void pure_transfer(){
     for(int i = 0;i < p_num;i++){
         if(get_packet[i]){
             got++;
-        } else {
-            printf("%d ", i);
         }
     }
-    printf("\n");
 
     printf("Lose rate: %f%%\n", ((p_num-got)/(float)p_num)*100);
 }
@@ -60,7 +56,7 @@ void pure_transfer(){
 void fec_transfer(){
     // redundant data will have 2 more packets
     _Bool get_packet[p_num+2]; // record whether get the i-th packet
-    int content[p_num];      // whether record the i-th content
+    _Bool content[p_num];      // whether record the i-th content
     char buffer[p_num*p_len]; // to reconstruct file //avoid overflow
     memset(content, 0, sizeof(content));
     memset(buffer, 0, sizeof(buffer));
@@ -74,11 +70,11 @@ void fec_transfer(){
             exit(1);
         } else{
             get_packet[p_buffer.index] = 1; // record "get the packet"
-            if(p_buffer.index < p_num && content[p_buffer.index] == 0){
+            if(p_buffer.index < p_num && content[p_buffer.index+1-1] == 0){
                 for(int i = 0; i < sizeof(p_buffer.next); i++){
                     buffer[p_buffer.index*p_len+i] = p_buffer.next[i];
                 }
-                content[p_buffer.index] = 1;
+                content[p_buffer.index+1-1] = 1;
             } 
             if(p_buffer.index > 0 && 
                       p_buffer.index < p_num+1 && 
@@ -93,7 +89,7 @@ void fec_transfer(){
                 for(int i = 0; i < sizeof(p_buffer.prev);i++){
                     buffer[(p_buffer.index-2)*p_len+i] = p_buffer.prev[i];
                 }
-                content[p_buffer.index-2] = 1;
+                content[p_buffer.index-1-1] = 1;
             }
 
         }
@@ -125,11 +121,6 @@ int main(int argc, char *argv[])
 
     // portno = string_to_int(argv[2])
     portno = atoi(argv[2]);
-
-
-
-
-
 
     /* Create a datagram socket on which to receive. */
     sd = socket(AF_INET, SOCK_DGRAM, 0);

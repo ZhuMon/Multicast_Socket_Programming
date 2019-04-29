@@ -23,7 +23,6 @@ struct packet_inf p_buffer; // packet to transfer
 void pure_transfer(){
     // Read file
     char buffer[my_fi.file_size+1];
-    //printf("hi\n");
     bzero(buffer, sizeof(buffer));
     fread(buffer, my_fi.file_size, 1, file);
 
@@ -39,20 +38,16 @@ void pure_transfer(){
     // Send file
     for(int i = 0; i < p_num; i++){
         clean_pi(&p_buffer);
-        
-        // Store index in packet
-        p_buffer.index = i;
+        p_buffer.index = i;  // Store index in packet
 
         // send the prev packet whose size is different with each other
         if(i == p_num+1 && my_fi.file_size % p_len != 0){
-            
             for(int j = 0; j < my_fi.file_size % p_len; j++){
                 p_buffer.content[j] = buffer[i*p_len+j];
             }
             if(sendto(sd, &p_buffer, sizeof(p_buffer), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
                 perror("Sending datagram message error");
             } 
-            
         } else {
             //split file to packet
             for(int j = 0; j < p_len; j++){
@@ -70,7 +65,6 @@ void pure_transfer(){
 void fec_transfer(){
     // Read file
     char buffer[my_fi.file_size+1];
-    //printf("hi\n");
     bzero(buffer, sizeof(buffer));
     fread(buffer, my_fi.file_size, 1, file);
 
@@ -121,18 +115,18 @@ void fec_transfer(){
             // the prev packet which has content
             
             //split file to packet
-            if(my_fi.file_size % p_len != 0){
+            if(my_fi.file_size % p_len != 0){  
+                // the last segment may be different with others
                 for(int j = 0; j < my_fi.file_size % p_len; j++){
                     p_buffer.content[j] = buffer[i*p_len+j];
-                }
-                for(int j = 0; j < p_len; j++){
-                    p_buffer.prev[j] = buffer[(i-1)*p_len+j];
                 }
             } else {
                 for(int j = 0; j < p_len; j++){
                     p_buffer.content[j] = buffer[i*p_len+j];
-                    p_buffer.prev[j] = buffer[(i-1)*p_len+j];
                 }
+            }
+            for(int j = 0; j < p_len; j++){
+                p_buffer.prev[j] = buffer[(i-1)*p_len+j];
             }
             if(sendto(sd, &p_buffer, sizeof(p_buffer), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0) {
                 perror("Sending datagram message error");
@@ -174,13 +168,6 @@ int main (int argc, char *argv[])
     clean_fi(&my_fi);
     strcat(my_fi.file_name, argv[3]);
 
-    // Open file & Check file
-    file = fopen(my_fi.file_name, "rb");
-    if (file == NULL) {
-        fprintf(stderr, "ERROR, open %s fail\n", argv[3]);
-        exit(1);
-    }
-
     // Get file imformation
     stat(my_fi.file_name, &f_state);
 
@@ -193,6 +180,13 @@ int main (int argc, char *argv[])
         p_num = f_state.st_size/p_len;
     } else { 
         p_num = f_state.st_size/p_len+1; 
+    }
+
+    // Open file & Check file
+    file = fopen(my_fi.file_name, "rb");
+    if (file == NULL) {
+        fprintf(stderr, "ERROR, open %s fail\n", argv[3]);
+        exit(1);
     }
 
     /* Create a datagram socket on which to send. */
